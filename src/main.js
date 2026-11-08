@@ -23,7 +23,7 @@ window.addEventListener('unhandledrejection', (e) => fail(e.reason));
 
 const glCanvas = document.getElementById('gl'), gizCanvas = document.getElementById('giz'), accCanvas = document.getElementById('acc');
 let W = CAPTURE ? +(Q.get('w') || WIDTH) : 0, H = CAPTURE ? +(Q.get('h') || HEIGHT) : 0;
-const DPR = CAPTURE ? 1 : Math.min(devicePixelRatio || 1, 2);
+let DPR = CAPTURE ? 1 : Math.min(devicePixelRatio || 1, 2); // live mode adapts this to hold ~50+ fps
 
 const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: CAPTURE });
 renderer.toneMapping = THREE.AgXToneMapping;
@@ -148,7 +148,19 @@ async function startLive(snd) {
     restart: () => play(0),
   });
   await play(0);
+  // adaptive resolution: every 45 frames compare the mean frame time with the budget and step DPR down / up
+  const steps = [2, 1.75, 1.5, 1.25, 1].filter((d) => d <= Math.min(devicePixelRatio || 1, 2));
+  if (!steps.length) steps.push(1);
+  let si = 0, acc = 0, cnt = 0, last = performance.now();
+  const adapt = () => {
+    const tnow = performance.now(); acc += tnow - last; last = tnow;
+    if (++cnt < 45) return;
+    const ms = acc / cnt; acc = 0; cnt = 0;
+    const next = ms > 21 ? Math.min(si + 1, steps.length - 1) : ms < 12 ? Math.max(si - 1, 0) : si;
+    if (next !== si) { si = next; DPR = steps[si]; renderer.setPixelRatio(DPR); resize(); }
+  };
   const loop = () => {
+    adapt();
     const t = now();
     const f = t * FPS;
     draw(f);

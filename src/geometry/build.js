@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { PARTS, NEEDS_OUTLINE, outlineDims } from './sdf.js';
 import { gridNZ } from './mesh.js';
 
-export const BUILD = '2026-11-09c'; // bump on every deploy: versions the worker and its imports
+export const BUILD = '2026-11-09d'; // bump on every deploy: versions the worker and its imports
 const SLAB = +(new URLSearchParams(location.search).get('slab') || 16); // z layers per slab job for the big parts
 
 export async function buildAllGeometry({ onProgress = () => {} } = {}) {

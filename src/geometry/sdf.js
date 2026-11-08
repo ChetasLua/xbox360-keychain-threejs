@@ -49,18 +49,29 @@ export function initOutline(j0 = 0, j1 = Infinity) {
   const out = new Float32Array(G.nx * (j1 - j0));
   const ax = new Float64Array(n), az = new Float64Array(n), ex = new Float64Array(n), ez = new Float64Array(n), il = new Float64Array(n), bzA = new Float64Array(n);
   for (let i = 0; i < n; i++) { const a = poly[(i - 1 + n) % n], b = poly[i]; ax[i] = a[0]; az[i] = a[1]; ex[i] = b[0] - a[0]; ez[i] = b[1] - a[1]; bzA[i] = b[1]; il[i] = 1 / (ex[i] * ex[i] + ez[i] * ez[i]); }
+  // exact distance to the polygon; points far from the curve (judged from a 0.2 cm coarse pass) only need
+  // the sign and a lower bound, so the expensive segment scan runs on a thin band around the outline
+  const exact = (px, pz) => {
+    let d = 1e9, inside = false;
+    for (let s = 0; s < n; s++) {
+      const wx = px - ax[s], wz = pz - az[s];
+      let t = (wx * ex[s] + wz * ez[s]) * il[s]; t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = wx - ex[s] * t, dz = wz - ez[s] * t, dd = dx * dx + dz * dz; if (dd < d) d = dd;
+      const bz = bzA[s]; // exact shared endpoint keeps the half-open test consistent
+      if ((az[s] > pz) !== (bz > pz) && px < ax[s] + (pz - az[s]) * ex[s] / ez[s]) inside = !inside;
+    }
+    return (inside ? -1 : 1) * sqrt(d);
+  };
+  const CH = 0.2, cnx = Math.ceil((G.nx - 1) * G.h / CH) + 2, czLo = Math.floor(j0 * G.h / CH), czHi = Math.ceil((j1 - 1) * G.h / CH) + 1;
+  const coarse = new Float64Array(cnx * (czHi - czLo + 1));
+  for (let cj = czLo; cj <= czHi; cj++) for (let ci = 0; ci < cnx; ci++) coarse[(cj - czLo) * cnx + ci] = exact(G.x0 + ci * CH, G.z0 + cj * CH);
   for (let j = j0; j < j1; j++) {
-    const pz = G.z0 + j * G.h;
+    const pz = G.z0 + j * G.h, fz = (j * G.h) / CH, cj = Math.min(Math.floor(fz), czHi - 1), v = fz - cj;
     for (let i = 0; i < G.nx; i++) {
-      const px = G.x0 + i * G.h; let d = 1e9, inside = false;
-      for (let s = 0; s < n; s++) {
-        const wx = px - ax[s], wz = pz - az[s];
-        let t = (wx * ex[s] + wz * ez[s]) * il[s]; t = t < 0 ? 0 : t > 1 ? 1 : t;
-        const dx = wx - ex[s] * t, dz = wz - ez[s] * t, dd = dx * dx + dz * dz; if (dd < d) d = dd;
-        const bz = bzA[s]; // exact shared endpoint keeps the half-open test consistent
-        if ((az[s] > pz) !== (bz > pz) && px < ax[s] + (pz - az[s]) * ex[s] / ez[s]) inside = !inside; // half-open crossing test
-      }
-      out[(j - j0) * G.nx + i] = (inside ? -1 : 1) * sqrt(d);
+      const fx = (i * G.h) / CH, ci = Math.min(Math.floor(fx), cnx - 2), u = fx - ci, b0 = (cj - czLo) * cnx + ci;
+      const est = (coarse[b0] * (1 - u) + coarse[b0 + 1] * u) * (1 - v) + (coarse[b0 + cnx] * (1 - u) + coarse[b0 + cnx + 1] * u) * v;
+      // bilinear of an SDF is within ~CH*0.71 of the truth: outside a 0.5 cm band the estimate is plenty
+      out[(j - j0) * G.nx + i] = abs(est) > 0.5 ? est : exact(G.x0 + i * G.h, pz);
     }
   }
   if (j0 === 0 && j1 === G.nz) D2 = out;

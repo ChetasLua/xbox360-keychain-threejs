@@ -42,7 +42,9 @@ export function polygonize(fn, lo, hi, h, k0 = 0, k1 = Infinity) {
   const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
   const CO = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
   const eps = h * 0.5;
+  const isFar = (i, j, k) => { const c = C[((i / B) | 0) + bnx * (((j / B) | 0) + bny * (((k / B) | 0) - bk0))]; return c > far || c < -far; };
   for (let k = za; k < zb; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    if (isFar(i, j, k)) { i += B - 1 - (i % B); continue; } // whole block row segment is empty space
     let mask = 0;
     for (let c = 0; c < 8; c++) { const v = F[idx(i + CO[c][0], j + CO[c][1], k + CO[c][2])]; corner[c] = v; if (v < 0) mask |= 1 << c; }
     if (mask === 0 || mask === 255) continue;
@@ -68,6 +70,7 @@ export function polygonize(fn, lo, hi, h, k0 = 0, k1 = Infinity) {
   };
   const kEnd = Math.min(k1, nz - 1);
   for (let k = Math.max(k0, 1); k < kEnd; k++) for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) {
+    if (isFar(i, j, k)) { i += B - 1 - (i % B); continue; }
     const v0 = F[idx(i, j, k)], in0 = v0 < 0;
     if (i < nx - 1 && (F[idx(i + 1, j, k)] < 0) !== in0) // x edge: cells (i, j-1..j, k-1..k)
       quad(cellV[cidx(i, j - 1, k - 1)], cellV[cidx(i, j, k - 1)], cellV[cidx(i, j, k)], cellV[cidx(i, j - 1, k)], !in0);

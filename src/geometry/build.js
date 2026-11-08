@@ -4,11 +4,12 @@ import * as THREE from 'three';
 import { PARTS, NEEDS_OUTLINE, outlineDims } from './sdf.js';
 import { gridNZ } from './mesh.js';
 
+export const BUILD = '2026-11-09c'; // bump on every deploy: versions the worker and its imports
 const SLAB = +(new URLSearchParams(location.search).get('slab') || 16); // z layers per slab job for the big parts
 
 export async function buildAllGeometry({ onProgress = () => {} } = {}) {
   const n = Math.max(2, Math.min((navigator.hardwareConcurrency || 4) - 1, 12));
-  const workers = Array.from({ length: n }, () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }));
+  const workers = Array.from({ length: n }, () => new Worker(new URL('./worker.js?v=' + BUILD, import.meta.url), { type: 'module' }));
   let nextId = 1; const waiting = new Map();
   for (const w of workers) w.onmessage = (e) => { const cb = waiting.get(e.data.id); waiting.delete(e.data.id); cb(e.data); };
   const call = (w, msg, transfer) => new Promise((res, rej) => {

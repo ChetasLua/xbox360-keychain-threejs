@@ -1,0 +1,190 @@
+<!doctype html>
+<!--
+  Xbox 360 · Keychain Build — a real-time three.js film.
+  Everything you see and hear (geometry, materials, animation, overlay, soundtrack) is generated in JavaScript.
+  No build step, no external assets. MIT License.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Xbox 360 · Keychain Build</title>
+  <meta name="description" content="An Xbox 360 controller keychain built piece by piece in real time. Pure three.js: procedural SDF geometry, physical materials, procedural soundtrack. No assets.">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
+  <meta property="og:title" content="Xbox 360 · Keychain Build">
+  <meta property="og:description" content="A 13-second real-time film built entirely in three.js: no models, no textures, no audio files.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%2378c850' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23fff'/%3E%3C/svg%3E">
+
+  <script type="importmap">
+    {"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/examples/jsm/"}}
+  </script>
+
+  <style>
+    :root {
+      --fg: #f2f2f2;
+      --fg-dim: rgba(242, 242, 242, 0.56);
+      --fg-faint: rgba(242, 242, 242, 0.18);
+      --accent: #7ed957;            /* Xbox 360 ring-of-light green */
+      --ease: cubic-bezier(.2, .7, .2, 1);
+      --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%; background: #000; color: var(--fg);
+      font-family: var(--font); -webkit-font-smoothing: antialiased;
+      overflow: hidden; overscroll-behavior: none; touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none;
+    }
+    button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+    button:focus-visible, a:focus-visible { outline: 1px solid var(--fg-dim); outline-offset: 3px; }
+
+    /* ---- stage: black page, 4:3 picture letterboxed and centred ---- */
+    #stage { position: fixed; inset: 0; background: #000; }
+    #frame {
+      position: absolute; inset: 0; margin: auto;
+      width: min(100vw, calc(100vh * 4 / 3));
+      height: min(100vh, calc(100vw * 3 / 4));
+      width: min(100vw, calc(100dvh * 4 / 3));
+      height: min(100dvh, calc(100vw * 3 / 4));
+      background: #000; overflow: hidden; contain: strict;
+    }
+    #frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    #acc { display: none; }
+    #giz { pointer-events: none; }
+    #stage.idle { cursor: none; }
+
+    /* ---- loader ---- */
+    .overlay {
+      position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 14px;
+      transition: opacity .6s var(--ease), visibility .6s;
+    }
+    .overlay.gone { opacity: 0; visibility: hidden; pointer-events: none; }
+    #loader { background: #000; z-index: 5; }
+    #loader .label {
+      font-size: 11px; letter-spacing: .22em; text-transform: lowercase; color: var(--fg-dim);
+      font-variant-numeric: tabular-nums; min-height: 1.4em; white-space: nowrap;
+    }
+    #loader .track { width: min(220px, 50vw); height: 1px; background: var(--fg-faint); overflow: hidden; }
+    #loader .fill { height: 100%; width: 100%; background: var(--fg); transform-origin: 0 50%; transform: scaleX(0); transition: transform .25s linear; }
+    #loader.error .label { color: #ff8a80; white-space: normal; max-width: min(520px, 86vw); text-align: center; line-height: 1.6; letter-spacing: .08em; }
+    #loader.error .track { display: none; }
+
+    /* ---- start card ---- */
+    #start { z-index: 4; background: radial-gradient(ellipse at center, rgba(0,0,0,.25), rgba(0,0,0,.72)); gap: 0; }
+    #start .play {
+      display: inline-flex; align-items: center; gap: .45em;
+      font-size: clamp(30px, 6.2vmin, 64px); font-weight: 300; letter-spacing: .02em;
+      padding: .32em .72em .32em .62em; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.28); background: rgba(255,255,255,.04);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      transition: transform .35s var(--ease), background .35s var(--ease), border-color .35s var(--ease);
+    }
+    #start .play svg { width: .62em; height: .62em; fill: currentColor; transform: translateX(.04em); }
+    #start .play:hover { transform: scale(1.04); background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.5); }
+    #start .play:active { transform: scale(.98); }
+    #start .sub { margin: 1.3em 0 0; font-size: clamp(12px, 1.9vmin, 16px); color: var(--fg-dim); letter-spacing: .04em; }
+    #start .hint {
+      margin: .7em 0 0; font-size: 10px; letter-spacing: .26em; text-transform: uppercase; color: var(--fg-faint);
+      display: inline-flex; align-items: center; gap: .6em;
+    }
+    #start .hint::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+    /* ---- controls (inside the picture) ---- */
+    .ctl { z-index: 3; transition: opacity .45s var(--ease); }
+    #stage.idle .ctl, #stage:not(.ready) .ctl { opacity: 0; pointer-events: none; }
+    #scrub {
+      position: absolute; left: 0; right: 0; bottom: 0; height: 28px; cursor: pointer; touch-action: none;
+      display: flex; align-items: flex-end;
+      background: linear-gradient(to top, rgba(0,0,0,.38), transparent);
+    }
+    #scrub .rail { position: relative; width: 100%; height: 2px; background: rgba(255,255,255,.16); transition: height .2s var(--ease); }
+    #scrub:hover .rail, #scrub.drag .rail { height: 4px; }
+    #scrub .prog { position: absolute; inset: 0; background: var(--fg); transform-origin: 0 50%; transform: scaleX(0); will-change: transform; }
+    #scrub .mark { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(0,0,0,.55); }
+    #scrub .knob {
+      position: absolute; top: 50%; left: 0; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+      background: var(--fg); transform: scale(0); transition: transform .2s var(--ease); will-change: left;
+    }
+    #scrub:hover .knob, #scrub.drag .knob { transform: scale(1); }
+    #time {
+      position: absolute; right: 12px; bottom: 12px; font: 10px/1 var(--mono); letter-spacing: .06em;
+      color: var(--fg-dim); font-variant-numeric: tabular-nums; pointer-events: none;
+    }
+    #mute {
+      position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 50%;
+      display: grid; place-items: center; color: var(--fg-dim); transition: color .2s, background .2s;
+    }
+    #mute:hover { color: var(--fg); background: rgba(255,255,255,.08); }
+    #mute svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    #mute .x { display: none; }
+    #mute.muted .x { display: inline; }
+    #mute.muted .w { display: none; }
+    #flash {
+      position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px; border-radius: 50%;
+      display: grid; place-items: center; background: rgba(0,0,0,.42); opacity: 0; transform: scale(.85);
+      pointer-events: none; z-index: 3;
+    }
+    #flash.on { animation: flash .6s var(--ease); }
+    #flash svg { width: 24px; height: 24px; fill: var(--fg); }
+    @keyframes flash { 0% { opacity: 1; transform: scale(.85); } 100% { opacity: 0; transform: scale(1.25); } }
+
+    #credit {
+      position: fixed; left: 12px; bottom: 10px; z-index: 6; font-size: 10px; letter-spacing: .16em;
+      text-transform: lowercase; color: rgba(255,255,255,.22); text-decoration: none; transition: color .2s;
+    }
+    #credit:hover { color: var(--fg-dim); }
+
+    /* ---- capture mode: fixed-size picture at the top-left, no chrome ---- */
+    body.capture #frame { inset: 0 auto auto 0; margin: 0; }
+    body.capture #acc { display: block; }
+    body.capture .overlay, body.capture .ctl, body.capture #credit, body.capture #flash { display: none !important; }
+
+    @media (prefers-reduced-motion: reduce) { * { transition-duration: 0s !important; animation: none !important; } }
+  </style>
+</head>
+<body>
+  <main id="stage" aria-label="Xbox 360 keychain build film">
+    <div id="frame">
+      <canvas id="gl" aria-hidden="true"></canvas>
+      <canvas id="acc" aria-hidden="true"></canvas>
+      <canvas id="giz" aria-hidden="true"></canvas>
+
+      <div id="flash" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z"/></svg></div>
+
+      <div id="scrub" class="ctl" role="slider" aria-label="Seek" aria-valuemin="0" aria-valuemax="13" aria-valuenow="0" tabindex="-1">
+        <div class="rail"><div class="prog"></div><div class="knob"></div></div>
+      </div>
+      <div id="time" class="ctl" aria-hidden="true">0:00.0</div>
+      <button id="mute" class="ctl" type="button" aria-label="Mute (M)" title="Mute (M)">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/>
+          <path class="w" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/>
+          <path class="x" d="M16 9.5l5 5M21 9.5l-5 5"/>
+        </svg>
+      </button>
+
+      <div id="start" class="overlay gone">
+        <button class="play" type="button" aria-label="Play film">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.8v16.4L20 12z"/></svg>Play
+        </button>
+        <p class="sub">Xbox 360 controller · built in three.js</p>
+        <p class="hint">sound on</p>
+      </div>
+    </div>
+
+    <div id="loader" class="overlay" role="status" aria-live="polite">
+      <div class="label">loading</div>
+      <div class="track"><div class="fill"></div></div>
+    </div>
+
+    <a id="credit" href="https://github.com/ChetasLua/xbox360-keychain-threejs" target="_blank" rel="noopener">source</a>
+  </main>
+
+  <noscript><p style="position:fixed;inset:0;display:grid;place-items:center;color:#aaa;font:14px sans-serif">This film is rendered live with JavaScript and WebGL.</p></noscript>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

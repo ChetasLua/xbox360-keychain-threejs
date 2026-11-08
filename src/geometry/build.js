@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // build.js — meshes every SDF part in a worker pool and returns three.js BufferGeometries (model space, cm).
 import * as THREE from 'three';
-import { PARTS, NEEDS_OUTLINE } from './sdf.js';
+import { PARTS, NEEDS_OUTLINE, outlineDims } from './sdf.js';
 import { gridNZ } from './mesh.js';
 
-const SLAB = +(new URLSearchParams(location.search).get("slab") || 22); // z layers per slab job for the big parts
+const SLAB = +(new URLSearchParams(location.search).get('slab') || 16); // z layers per slab job for the big parts
 
 export async function buildAllGeometry({ onProgress = () => {} } = {}) {
-  const n = Math.max(2, Math.min((navigator.hardwareConcurrency || 4) - 1, 8));
+  const n = Math.max(2, Math.min((navigator.hardwareConcurrency || 4) - 1, 12));
   const workers = Array.from({ length: n }, () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }));
   let nextId = 1; const waiting = new Map();
   for (const w of workers) w.onmessage = (e) => { const cb = waiting.get(e.data.id); waiting.delete(e.data.id); cb(e.data); };
@@ -16,7 +16,11 @@ export async function buildAllGeometry({ onProgress = () => {} } = {}) {
   });
 
   onProgress(0, 'tracing the outline');
-  const { outline } = await call(workers[0], { type: 'outline' });
+  // the 2D outline SDF is computed in row bands across the whole pool, then shared with every worker
+  const [onx, onz] = outlineDims(), band = Math.ceil(onz / n);
+  const parts = await Promise.all(workers.map((w, i) => call(w, { type: 'outline', j0: i * band, j1: Math.min(onz, (i + 1) * band) })));
+  const outline = new Float32Array(onx * onz);
+  parts.forEach((r, i) => outline.set(r.rows, i * band * onx));
 
   // plan jobs (largest first so the pool stays busy)
   const jobs = [];

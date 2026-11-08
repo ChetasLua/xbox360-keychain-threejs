@@ -16,12 +16,22 @@ export function polygonize(fn, lo, hi, h, k0 = 0, k1 = Infinity) {
   // ---- sample the field (boundary forced outside so every surface closes)
   const F = new Float32Array(nx * ny * lz);
   const idx = (i, j, k) => i + nx * (j + ny * (k - za));
+  // Narrow band: evaluate the SDF once per 4³ block centre; blocks clearly far from the surface are filled with
+  // that value (only the sign matters there), so the full SDF only runs near the surface (~5-10× fewer calls).
+  const B = 4, bnx = Math.ceil(nx / B), bny = Math.ceil(ny / B), bk0 = Math.floor(za / B), bnz = Math.floor(zb / B) - bk0 + 1;
+  const C = new Float32Array(bnx * bny * bnz), far = 1.6 * B * h + 2 * h;
+  for (let bk = 0; bk < bnz; bk++) for (let bj = 0; bj < bny; bj++) for (let bi = 0; bi < bnx; bi++)
+    C[bi + bnx * (bj + bny * bk)] = fn(lo[0] + (bi * B + 1.5) * h, lo[1] + (bj * B + 1.5) * h, lo[2] + ((bk + bk0) * B + 1.5) * h);
   for (let k = za; k <= zb; k++) {
-    const z = lo[2] + k * h, kb = k === 0 || k === nz - 1;
+    const z = lo[2] + k * h, kb = k === 0 || k === nz - 1, ck = (Math.floor(k / B) - bk0) * bny;
     for (let j = 0; j < ny; j++) {
-      const y = lo[1] + j * h, jb = j === 0 || j === ny - 1;
+      const y = lo[1] + j * h, jb = j === 0 || j === ny - 1, cj = (ck + Math.floor(j / B)) * bnx;
       let o = idx(0, j, k);
-      for (let i = 0; i < nx; i++, o++) F[o] = (kb || jb || i === 0 || i === nx - 1) ? 1 : fn(lo[0] + i * h, y, z);
+      for (let i = 0; i < nx; i++, o++) {
+        if (kb || jb || i === 0 || i === nx - 1) { F[o] = 1; continue; }
+        const c = C[cj + ((i / B) | 0)];
+        F[o] = (c > far || c < -far) ? c : fn(lo[0] + i * h, y, z);
+      }
     }
   }
   // ---- one vertex per sign-changing cell (cells k in [za, zb-1])

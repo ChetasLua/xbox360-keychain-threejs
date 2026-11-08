@@ -6,7 +6,7 @@ import { polygonize } from './mesh.js';
 self.onmessage = (e) => {
   const m = e.data;
   try {
-    if (m.type === 'outline') { const buf = initOutline(); self.postMessage({ id: m.id, outline: buf.slice() }); return; }
+    if (m.type === 'outline') { const buf = initOutline(m.j0, m.j1); self.postMessage({ id: m.id, rows: buf }, [buf.buffer]); return; }
     if (m.outline) setOutline(m.outline);
     const p = PARTS[m.name];
     const r = polygonize(p.fn, p.lo, p.hi, p.h, m.k0 ?? 0, m.k1 ?? Infinity);

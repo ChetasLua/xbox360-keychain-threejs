@@ -40,14 +40,16 @@ function catmull(pts, n) {
 /** Use an outline grid computed elsewhere (shared between workers). */
 export function setOutline(buf) { D2 = buf; G.nx = Math.round((8.8 - G.x0) / G.h) + 1; G.nz = Math.round((4.8 - G.z0) / G.h) + 1; }
 /** Exact polygon distance on a 0.025 cm grid (~0.3 s); returns the Float32Array so it can be shared. */
-export function initOutline() {
-  if (D2) return D2;
+export function outlineDims() { return [Math.round((8.8 - G.x0) / G.h) + 1, Math.round((4.8 - G.z0) / G.h) + 1]; }
+export function initOutline(j0 = 0, j1 = Infinity) {
+  if (D2 && j0 === 0 && j1 === Infinity) return D2;
   const poly = catmull(outlineControlPoints(), 720), n = poly.length;
   G.nx = Math.round((8.8 - G.x0) / G.h) + 1; G.nz = Math.round((4.8 - G.z0) / G.h) + 1;
-  D2 = new Float32Array(G.nx * G.nz);
+  j1 = Math.min(j1, G.nz);
+  const out = new Float32Array(G.nx * (j1 - j0));
   const ax = new Float64Array(n), az = new Float64Array(n), ex = new Float64Array(n), ez = new Float64Array(n), il = new Float64Array(n), bzA = new Float64Array(n);
   for (let i = 0; i < n; i++) { const a = poly[(i - 1 + n) % n], b = poly[i]; ax[i] = a[0]; az[i] = a[1]; ex[i] = b[0] - a[0]; ez[i] = b[1] - a[1]; bzA[i] = b[1]; il[i] = 1 / (ex[i] * ex[i] + ez[i] * ez[i]); }
-  for (let j = 0; j < G.nz; j++) {
+  for (let j = j0; j < j1; j++) {
     const pz = G.z0 + j * G.h;
     for (let i = 0; i < G.nx; i++) {
       const px = G.x0 + i * G.h; let d = 1e9, inside = false;
@@ -58,10 +60,11 @@ export function initOutline() {
         const bz = bzA[s]; // exact shared endpoint keeps the half-open test consistent
         if ((az[s] > pz) !== (bz > pz) && px < ax[s] + (pz - az[s]) * ex[s] / ez[s]) inside = !inside; // half-open crossing test
       }
-      D2[j * G.nx + i] = (inside ? -1 : 1) * sqrt(d);
+      out[(j - j0) * G.nx + i] = (inside ? -1 : 1) * sqrt(d);
     }
   }
-  return D2;
+  if (j0 === 0 && j1 === G.nz) D2 = out;
+  return out;
 }
 export function d2(x, z) {
   let fx = (x - G.x0) / G.h, fz = (z - G.z0) / G.h;

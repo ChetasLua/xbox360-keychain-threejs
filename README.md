@@ -7,7 +7,7 @@ It ends on a turntable with colour swaps.
 
 **Everything is generated in the browser.** There are no models, textures, fonts or audio files.
 
-- **Geometry:** every part is a signed distance function (`src/geometry/sdf.js`). At load time, a pool of Web Workers meshes each one with Surface Nets, using SDF-gradient normals (`mesh.js`, `build.js`). That is about 4.7 M triangles in roughly 2 s.
+- **Geometry:** every part is a signed distance function (`src/geometry/sdf.js`). At load time, a pool of Web Workers meshes each one with Surface Nets, using SDF-gradient normals (`mesh.js`, `build.js`). That is about 4.7 M triangles in about 1–2 s, because only voxels near the surface are evaluated.
 - **Look:** MeshPhysicalMaterial plastics with an object-space micro-grain bump, and transmissive gems with coloured attenuation. Lighting is a studio softbox environment, and the post chain is GTAO, depth of field, bloom and AgX tone mapping.
 - **Animation:** `src/timeline.js` is a frame-exact port of the original shot list: springs, drops, a carve, a ring-of-light boot, a copper→steel chain and a turntable.
 - **Sound:** synthesised with WebAudio at load (`src/audio.js`): pad, pops, clicks, chain clinks and chimes. The film runs on the audio clock.
